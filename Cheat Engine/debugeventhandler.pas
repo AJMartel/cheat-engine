@@ -202,14 +202,24 @@ begin
   TDebuggerthread(debuggerthread).execlocation:=41;
   UpdateMemoryBrowserContext;
 
+  TDebuggerthread(debuggerthread).execlocation:=411;
+
+
+
   if (currentbp<>nil) and (assigned(currentbp.OnBreakpoint)) then
     WaitingToContinue:=currentbp.OnBreakpoint(currentbp, context)
   else
-    WaitingToContinue:=not lua_onBreakpoint(context);
+    WaitingToContinue:=not lua_onBreakpoint(Self.ThreadId, context);
+
+  TDebuggerthread(debuggerthread).execlocation:=412;
 
 
   if WaitingToContinue then //no lua script or it returned 0
+  begin
+    TDebuggerthread(debuggerthread).execlocation:=413;
     MemoryBrowser.UpdateDebugContext(self.Handle, self.ThreadId);
+  end;
+  TDebuggerthread(debuggerthread).execlocation:=414;
 
 end;
 
@@ -807,8 +817,7 @@ begin
         if bp.conditonalbreakpoint.easymode then script:='return ('+script+')';
       end;
 
-
-      result:=CheckIfConditionIsMetContext(context, script);
+      result:=CheckIfConditionIsMetContext(self.ThreadId, context, script);
     end;
   end;
 end;
@@ -1415,6 +1424,10 @@ begin
     if (CurrentDebuggerInterface is TKernelDebugInterface) or
        (CurrentDebuggerInterface is TNetworkDebuggerInterface) then //the kerneldebuginterface and networkdebuginterface do not give a breakpoint as init so use create as attachevent
       onAttachEvent.SetEvent;
+
+    if (CurrentDebuggerInterface is TWindowsDebuggerInterface) and (debugEvent.CreateProcessInfo.hFile<>0) then
+      closeHandle(debugEvent.CreateProcessInfo.hFile); //we don't need this
+
 
     secondcreateprocessdebugevent:=true;
   end;

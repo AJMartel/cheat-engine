@@ -6,7 +6,8 @@ interface
 
 uses
   windows, LCLIntf, Messages, SysUtils, Classes, Graphics, Controls, Forms,
-  Dialogs, StdCtrls, ExtCtrls, LResources, Menus, CEFuncProc, commonTypeDefs;
+  Dialogs, StdCtrls, ExtCtrls, LResources, Menus, Buttons, CEFuncProc,
+  commonTypeDefs;
 
 type
 
@@ -37,6 +38,7 @@ type
     procedure Edit1MouseDown(Sender: TObject; Button: TMouseButton;
       Shift: TShiftState; X, Y: Integer);
     procedure edtSHSpeedChange(Sender: TObject);
+    procedure edtSHSpeedExit(Sender: TObject);
     procedure ListBox1Click(Sender: TObject);
     procedure Edit1KeyDown(Sender: TObject; var Key: Word;
       Shift: TShiftState);
@@ -181,6 +183,14 @@ end;
 procedure TframeHotkeyConfig.edtSHSpeedChange(Sender: TObject);
 begin
 
+end;
+
+procedure TframeHotkeyConfig.edtSHSpeedExit(Sender: TObject);
+begin
+  try
+    updatespeed;
+  except
+  end;
 end;
 
 procedure TframeHotkeyConfig.Edit1MouseDown(Sender: TObject;

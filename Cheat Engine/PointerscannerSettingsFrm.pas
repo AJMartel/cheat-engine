@@ -284,6 +284,8 @@ var
   list: tstringlist;
 begin
   list:=tstringlist(combobox.tag);
+  if list=nil then exit;
+
   combobox.Items.Clear;
 
   maxwidth:=combobox.clientwidth-combobox.Left;
@@ -1107,6 +1109,13 @@ begin
     begin
       reg.WriteBool('Advanced', cbShowAdvancedOptions.checked);
       reg.WriteBool('warnedAboutDisablingInstantRescan', warnedAboutDisablingInstantRescan);
+
+      if TryStrToInt(edtMaxOffsetsPerNode.text,i) then
+      begin
+        reg.WriteBool('MaxOffsetsPerNode Checked', cbMaxOffsetsPerNode.checked);
+        reg.WriteInteger('MaxOffsetsPerNode Value', i);
+      end;
+
     end;
 
     if Reg.OpenKey('\Software\Cheat Engine\PSNNodeList', false) then
@@ -1212,11 +1221,15 @@ begin
     edtReverseStop.MaxLength:=edtReverseStart.MaxLength;
   end;
 
+  i:=editMaxLevel.left+editMaxLevel.width;
+  combobox1.width:=combobox1.width+(i-(combobox1.left+combobox1.width));
+
+
   i:=max(edtReverseStart.clientwidth, max(canvas.TextWidth(edtReverseStart.text), canvas.TextWidth(edtReverseStop.text)))+8;
   edtReverseStart.clientwidth:=i;
   edtReverseStop.clientwidth:=i;
 
-  i:=max(canvas.TextWidth(editStructsize.text), editStructsize.width)+4;
+  i:=max(canvas.TextWidth(editStructsize.text)+4, editStructsize.clientwidth);
   editStructsize.clientwidth:=i;
 
   i:=max(btnOk.width, btnCancel.width);
@@ -1224,7 +1237,6 @@ begin
   btnCancel.autosize:=false;
   btnok.width:=i;
   btnCancel.width:=i;
-
 
   firstshow:=false;
 
@@ -1240,6 +1252,8 @@ begin
 
   UpdateAddressList(cbAddress);
   cbAddress.ItemHeight:=cbValueType.ItemHeight;
+
+
 end;
 
 procedure TfrmPointerScannerSettings.FormCreate(Sender: TObject);
@@ -1286,6 +1300,13 @@ begin
 
     if reg.ValueExists('warnedAboutDisablingInstantRescan') then
       warnedAboutDisablingInstantRescan:=reg.ReadBool('warnedAboutDisablingInstantRescan');
+
+    if reg.ValueExists('MaxOffsetsPerNode Checked') then
+      cbMaxOffsetsPerNode.checked:=reg.ReadBool('MaxOffsetsPerNode Checked');
+
+    if reg.ValueExists('MaxOffsetsPerNode Value') then
+      edtMaxOffsetsPerNode.Text:=inttostr(reg.ReadInteger('MaxOffsetsPerNode Value'));
+
   end;
 
   if Reg.OpenKey('\Software\Cheat Engine\PSNNodeList', false) then

@@ -37,13 +37,16 @@ const
   wm_freedebugger = WM_USER + 1;
 
 const
-  wm_scandone = WM_USER + 2;
+  //wm_scandone = WM_USER + 2;
   wm_pluginsync = WM_USER + 3;
 
   wm_showerror = WM_USER + 4;
 
 //scantabs
 type
+  TProcessOpenedEvent=procedure(processid: THandle; processhandle: DWORD; caption: string) of object;
+
+
   TScanState = record
     alignsizechangedbyuser: boolean;
     compareToSavedScan: boolean;
@@ -73,6 +76,11 @@ type
     end;
 
     cbunicode: record
+      checked: boolean;
+      visible: boolean;
+    end;
+
+    cbcodepage: record
       checked: boolean;
       visible: boolean;
     end;
@@ -200,6 +208,18 @@ type
     procedure Execute; override;
   end;
 
+type
+  TAutoAttachThread=class(TThread)
+  private
+    fInterval: integer;
+  public
+    CurrentProcessList: TStringList;
+    procedure autoattachcheck;
+    constructor Create(CreateSuspended: boolean);
+    procedure Execute; override;
+  published
+    property Interval: integer read fInterval write fInterval;
+  end;
 
 
 
@@ -230,11 +250,18 @@ type
     cbWritable: TCheckBox;
     cbpercentage: TCheckBox;
     cbNot: TCheckBox;
+    cbCodePage: TCheckBox;
     ColorDialog1: TColorDialog;
     CreateGroup: TMenuItem;
     FromAddress: TEdit;
     andlabel: TLabel;
+    lblSigned: TLabel;
+    MainMenu2: TMainMenu;
     MenuItem12: TMenuItem;
+    miChangeValueBack: TMenuItem;
+    miSignTable: TMenuItem;
+    miSaveFile: TMenuItem;
+    miAsyncScript: TMenuItem;
     miFlFindWhatAccesses: TMenuItem;
     MenuItem13: TMenuItem;
     miFlFindWhatWrites: TMenuItem;
@@ -369,7 +396,6 @@ type
     N5: TMenuItem;
     Panel4: TPanel;
     advancedbutton: TSpeedButton;
-    Label7: TLabel;
     CommentButton: TSpeedButton;
     Panel5: TPanel;
     ProcessLabel: TLabel;
@@ -387,7 +413,7 @@ type
     btnNextScan: TButton;
     ScanType: TComboBox;
     VarType: TComboBox;
-    ProgressBar1: TProgressBar;
+    ProgressBar: TProgressBar;
     UndoScan: TButton;
     scanvalue: TEdit;
     foundlistpopup: TPopupMenu;
@@ -431,9 +457,9 @@ type
     MainMenu1: TMainMenu;
     File1: TMenuItem;
     Process1: TMenuItem;
-    Help1: TMenuItem;
+    miHelp: TMenuItem;
     Edit3: TMenuItem;
-    About1: TMenuItem;
+    miAbout: TMenuItem;
     OpenProcess1: TMenuItem;
     Save1: TMenuItem;
     Load1: TMenuItem;
@@ -456,29 +482,31 @@ type
     procedure actOpenDissectStructureExecute(Sender: TObject);
     procedure actOpenLuaEngineExecute(Sender: TObject);
     procedure Address1Click(Sender: TObject);
-    procedure Button1Click(Sender: TObject);
+    procedure cbCodePageChange(Sender: TObject);
+    procedure cbUnicodeChange(Sender: TObject);
+    procedure EnableLCLClick(Sender: TObject);
     procedure cbFastScanChange(Sender: TObject);
     procedure cbUnrandomizerChange(Sender: TObject);
     procedure Description1Click(Sender: TObject);
     procedure edtAlignmentKeyPress(Sender: TObject; var Key: char);
-    procedure FormActivate(Sender: TObject);
-    procedure FormDeactivate(Sender: TObject);
     procedure FormDropFiles(Sender: TObject; const FileNames: array of string);
-    procedure Foundlist3AdvancedCustomDrawSubItem(Sender: TCustomListView;
-      Item: TListItem; SubItem: Integer; State: TCustomDrawState;
-      Stage: TCustomDrawStage; var DefaultDraw: Boolean);
+    procedure Foundlist3CustomDrawItem(Sender: TCustomListView;
+      Item: TListItem; State: TCustomDrawState; var DefaultDraw: boolean);
     procedure Foundlist3CustomDrawSubItem(Sender: TCustomListView;
       Item: TListItem; SubItem: Integer; State: TCustomDrawState;
       var DefaultDraw: Boolean);
-    procedure Foundlist3Resize(Sender: TObject);
     procedure CreateGroupClick(Sender: TObject);
     procedure Foundlist3SelectItem(Sender: TObject; Item: TListItem;
       Selected: boolean);
     procedure MenuItem12Click(Sender: TObject);
+    procedure miChangeValueBackClick(Sender: TObject);
+    procedure miSignTableClick(Sender: TObject);
+    procedure miAsyncScriptClick(Sender: TObject);
     procedure miFlFindWhatAccessesClick(Sender: TObject);
     procedure miBindDeactivationClick(Sender: TObject);
     procedure miDisassembleClick(Sender: TObject);
     procedure miFlFindWhatWritesClick(Sender: TObject);
+    procedure miSaveFileClick(Sender: TObject);
     procedure miScanDirtyOnlyClick(Sender: TObject);
     procedure miCompressionClick(Sender: TObject);
     procedure miGeneratePointermapClick(Sender: TObject);
@@ -489,7 +517,6 @@ type
     procedure miOpenFileClick(Sender: TObject);
     procedure miScanPagedOnlyClick(Sender: TObject);
     procedure miSetDropdownOptionsClick(Sender: TObject);
-    procedure miSetupSnapshotKeysClick(Sender: TObject);
     procedure miShowAsSignedClick(Sender: TObject);
     procedure miShowCustomTypeDebugClick(Sender: TObject);
     procedure miShowPreviousValueClick(Sender: TObject);
@@ -536,13 +563,9 @@ type
     procedure Panel5Resize(Sender: TObject);
     procedure pmTablistPopup(Sender: TObject);
     procedure pmValueTypePopup(Sender: TObject);
-    procedure pnlScanOptionsClick(Sender: TObject);
-    procedure pnlScanOptionsResize(Sender: TObject);
     procedure rbAllMemoryChange(Sender: TObject);
     procedure rbFsmAlignedChange(Sender: TObject);
     procedure Save1Click(Sender: TObject);
-    procedure ScanTypeSelect(Sender: TObject);
-    procedure scanvalueChange(Sender: TObject);
     procedure ShowProcessListButtonClick(Sender: TObject);
     procedure btnNewScanClick(Sender: TObject);
     procedure btnNextScanClick(Sender: TObject);
@@ -551,7 +574,6 @@ type
     procedure AddressKeyPress(Sender: TObject; var Key: char);
     procedure FoundListDblClick(Sender: TObject);
     procedure Browsethismemoryarrea1Click(Sender: TObject);
-    procedure TrackBar1Change(Sender: TObject);
     procedure UpdateTimerTimer(Sender: TObject);
     procedure FreezeTimerTimer(Sender: TObject);
     procedure Browsethismemoryregion1Click(Sender: TObject);
@@ -564,14 +586,12 @@ type
     procedure VarTypeChange(Sender: TObject);
     procedure LogoClick(Sender: TObject);
     procedure VarTypeDropDown(Sender: TObject);
-    procedure WindowsClick(Sender: TObject);
     procedure FormCloseQuery(Sender: TObject; var CanClose: boolean);
     procedure SpeedButton2Click(Sender: TObject);
     procedure SpeedButton3Click(Sender: TObject);
     procedure Selectallitems1Click(Sender: TObject);
     procedure Freezealladdresses2Click(Sender: TObject);
     procedure PopupMenu2Popup(Sender: TObject);
-    procedure Unfreezealladdresses1Click(Sender: TObject);
     procedure foundlistpopupPopup(Sender: TObject);
     procedure Removeselectedaddresses1Click(Sender: TObject);
     procedure FormClose(Sender: TObject; var Action: TCloseAction);
@@ -601,14 +621,11 @@ type
     procedure cbCaseSensitiveClick(Sender: TObject);
     procedure LogoMouseDown(Sender: TObject; Button: TMouseButton;
       Shift: TShiftState; X, Y: integer);
-    procedure btnShowRegionsClick(Sender: TObject);
     procedure Findoutwhataccessesthisaddress1Click(Sender: TObject);
     procedure OpenProcesslist1Click(Sender: TObject);
     procedure CloseCheatEngine1Click(Sender: TObject);
     procedure Showashexadecimal1Click(Sender: TObject);
     procedure OpenMemorybrowser1Click(Sender: TObject);
-    procedure cbFastScanClick(Sender: TObject);
-    procedure rbAllMemoryClick(Sender: TObject);
     procedure cbPauseWhileScanningClick(Sender: TObject);
     procedure ProcessLabelDblClick(Sender: TObject);
     procedure ProcessLabelMouseDown(Sender: TObject; Button: TMouseButton;
@@ -616,8 +633,6 @@ type
     procedure cbUnrandomizerClick(Sender: TObject);
     procedure cbUnrandomizerMouseDown(Sender: TObject; Button: TMouseButton;
       Shift: TShiftState; X, Y: integer);
-    procedure Foundlist3CustomDrawItem(Sender: TCustomListView;
-      Item: TListItem; State: TCustomDrawState; var DefaultDraw: boolean);
     procedure actOpenExecute(Sender: TObject);
     procedure actSaveExecute(Sender: TObject);
     procedure actAutoAssembleExecute(Sender: TObject);
@@ -638,13 +653,11 @@ type
     procedure btnSetSpeedhack2Click(Sender: TObject);
     procedure cbSpeedhackChange(Sender: TObject);
     procedure Process1Click(Sender: TObject);
-    procedure About1Click(Sender: TObject);
+    procedure miAboutClick(Sender: TObject);
     procedure CreateProcess1Click(Sender: TObject);
     procedure Helpindex1Click(Sender: TObject);
     procedure New1Click(Sender: TObject);
-    procedure actLuaScriptExecute(Sender: TObject);
     procedure File1Click(Sender: TObject);
-    procedure Label61Click(Sender: TObject);
     procedure actOpenProcesslistExecute(Sender: TObject);
     procedure Type1Click(Sender: TObject);
   private
@@ -700,6 +713,7 @@ type
     scantypechangedbyhotkey: boolean;
 
     fIsProtected: boolean;
+    fOnProcessOpened: TProcessOpenedEvent;
 
     overlayid: integer;   //debug
     lastAddedAddress: string;
@@ -719,7 +733,7 @@ type
     procedure checkpaste;
     procedure hotkey(var Message: TMessage); message WM_HOTKEY;
     procedure Hotkey2(var Message: TMessage); message wm_hotkey2;
-    procedure ScanDone(var message: TMessage); message WM_SCANDONE;
+    procedure ScanDone(sender: TObject); //(var message: TMessage); message WM_SCANDONE;
     procedure PluginSync(var m: TMessage); message wm_pluginsync;
     procedure ShowError(var message: TMessage); message wm_showerror;
     procedure Edit;
@@ -758,7 +772,7 @@ type
     procedure AddresslistDropByListview(Sender: TObject; node: TTreenode;
       attachmode: TNodeAttachMode);
 
-    procedure SaveCurrentState(scanstate: PScanState);
+    procedure SaveCurrentState(scanstate: PScanState; skipuservalues: boolean=false);
     procedure SetupInitialScanTabState(scanstate: PScanState; IsFirstEntry: boolean);
     procedure ScanTabListTabChange(Sender: TObject; oldselection: integer);
 
@@ -798,6 +812,9 @@ type
 
     procedure createGroupConfigButton;
     procedure destroyGroupConfigButton;
+
+    procedure MemscanGuiUpdate(sender: TObject; totaladdressestoscan: qword; currentlyscanned: qword; foundcount: qword);
+
   public
     { Public declarations }
     addresslist: TAddresslist;
@@ -838,11 +855,13 @@ type
     cbsaferPhysicalMemory: TCheckbox;
     mustClose: boolean;
 
+    imgSignature: TImage;
+
 
     procedure updated3dgui;
     procedure RefreshCustomTypes;
 
-    procedure autoattachcheck;
+    procedure autoattachcheck(pl: TStringList = nil); // can be called by AutoAttachTimer or AutoAttachThread
     function openprocessPrologue: boolean;
     procedure openProcessEpilogue(oldprocessname: string; oldprocess: dword;
       oldprocesshandle: dword; autoattachopen: boolean = False);
@@ -896,11 +915,16 @@ type
 
     property SelectedVariableType: TVariableType read getSelectedVariableType;
     property isProtected: boolean read fIsProtected write setIsProtected;
+    property Progressbar1: TProgressBar read Progressbar write ProgressBar;
+    property About1: TMenuItem read miAbout write miAbout;
+    property Help1: TMenuItem read miHelp write miHelp;
+    property OnProcessOpened: TProcessOpenedEvent read fOnProcessOpened write fOnProcessOpened;
   end;
 
 var
   MainForm: TMainForm;
   ToggleWindows: TTogglewindows;
+  AutoAttachThread: TAutoAttachThread;
 
 implementation
 
@@ -915,7 +939,8 @@ uses mainunit2, ProcessWindowUnit, MemoryBrowserFormUnit, TypePopup, HotKeys,
   frmSetCrosshairUnit, StructuresFrm2, frmMemoryViewExUnit,
   frmD3DHookSnapshotConfigUnit, frmSaveSnapshotsUnit, frmsnapshothandlerUnit,
   frmNetworkDataCompressionUnit, ProcessHandlerUnit, ProcessList, pointeraddresslist,
-  PointerscanresultReader, Parsers, Globals, GnuAssembler, xinput, DPIHelper, multilineinputqueryunit, winsapi;
+  PointerscanresultReader, Parsers, Globals, GnuAssembler, xinput, DPIHelper,
+  multilineinputqueryunit, winsapi, LuaClass, Filehandler, feces;
 
 resourcestring
   rsInvalidStartAddress = 'Invalid start address: %s';
@@ -1111,6 +1136,8 @@ resourcestring
   rsFailureSettingTheCreateGlobalPrivilege = 'Failure setting the CreateGlobal privilege.';
   rsCurrentProcess = 'Current process';
   rsNone = '<none>';
+  rsBusy = '<busy>';
+  rsFileInUse = '<File in use>';
   rsCEError = 'CE Error:';
   rsPart = ' part ';
   rsChangeValue = 'Change value';
@@ -1124,6 +1151,9 @@ resourcestring
   rsCustomTypeName = 'Custom Type Name';
   rsLanguage = 'Language';
   rsChooseLanguage = 'Which language do you wish to use?';
+  rsInvalidScanFolder = '%s is not accessible like it should.  Please '
+    +'configure a proper location in the settings';
+  rsProcessing = '<Processing>';
 
 var
   ncol: TColor;
@@ -1215,10 +1245,7 @@ begin
     FreeAndNil(changescript1);
 
     frmLuaTableScript.assemblescreen.ClearAll;
-
-    frmLuaTableScript.Free;
-    frmLuaTableScript:=TfrmAutoInject(tcustomform(mainform));
-
+    frmLuaTableScript.assemblescreen.Text:='wut?';
   end;
 end;
 
@@ -1976,6 +2003,12 @@ begin
     ParentShowHint := False;
     ShowHint := True;
 
+
+    cancelbutton.Anchors:=[];
+    cancelbutton.AnchorSideLeft.Control:=btnNewScan;
+    cancelbutton.AnchorSideLeft.Side:=asrLeft;
+    cancelbutton.Anchors:=[akLeft, akTop];
+
     parent := panel5;
   end;
 
@@ -2036,7 +2069,6 @@ begin
   if not scanstarted then
   begin
     setGbScanOptionsEnabled(True);
-    cbFastScanClick(cbfastscan);
   end;
 
   scanvalue.Enabled := True;
@@ -2366,6 +2398,9 @@ begin
     if rbBit.Visible then
       cbHexadecimal.Visible := False;
 
+    pnlScanValueOptions.visible:=(cbHexadecimal.Visible or rbDec.visible or rbBit.Visible);
+
+
     //save the last scantype (if it wasn't the option to change between first/last)
     if (scantype.ItemIndex <> -1) and (scantype.ItemIndex < scantype.Items.Count) then
     begin
@@ -2524,9 +2559,10 @@ begin
       m.Extra.bitData.showasbinary := rbBit.Checked
     else
     if (m.VarType = vtString) then
+    begin
       m.Extra.stringData.unicode := foundlist.isUnicode;
-
-
+      m.Extra.stringData.codepage := memscan.codePage;
+    end;
   end;
 
 end;
@@ -2578,6 +2614,7 @@ var
   DoNotOpenAssociatedTable: boolean;
   //set to true if the table had AA scripts enabled or the code list had nopped instruction
 begin
+
   DoNotOpenAssociatedTable:=false;
 
   outputdebugstring('openProcessEpilogue called');
@@ -2680,7 +2717,7 @@ begin
     //apply this for all tabs
     if scantablist <> nil then
       for i := 0 to scantablist.Count - 1 do
-        SaveCurrentState(PScanState(scantablist.TabData[i]));
+        SaveCurrentState(PScanState(scantablist.TabData[i]), true);
 
   end;
 
@@ -2731,10 +2768,7 @@ begin
           if (messagedlg(rsThereAreOneOrMoreAutoAssemblerEntriesOrCodeChanges,
             mtConfirmation, [mbYes, mbNo], 0) = mrYes) then
           begin
-            for j := 0 to addresslist.Count - 1 do
-              if (addresslist[j].VarType = vtAutoAssembler) and
-                (addresslist[j].active) then
-                addresslist[j].disablewithoutexecute;
+            addresslist.disableAllWithoutExecute;
 
             for i := 0 to length(AdvancedOptions.code) - 1 do
               AdvancedOptions.code[i].changed := False;
@@ -2783,10 +2817,15 @@ begin
 
   if scantablist <> nil then
     for i := 0 to scantablist.Count - 1 do
-      SaveCurrentState(PScanState(scantablist.TabData[i]));
+      SaveCurrentState(PScanState(scantablist.TabData[i]),true);
 
 
   outputdebugstring('openProcessEpilogue exit');
+
+
+  if assigned(fOnProcessOpened) then
+    fOnProcessOpened(processid, processhandle, processlabel.Caption);
+
 end;
 
 procedure TMainForm.ShowProcessListButtonClick(Sender: TObject);
@@ -2840,21 +2879,6 @@ begin
     savetable(savedialog1.FileName);
 end;
 
-procedure TMainForm.ScanTypeSelect(Sender: TObject);
-begin
-
-end;
-
-procedure TMainForm.scanvalueChange(Sender: TObject);
-begin
-
-end;
-
-procedure TMainForm.Foundlist3Resize(Sender: TObject);
-begin
-
-end;
-
 procedure TMainForm.Description1Click(Sender: TObject);
 begin
   addresslist.doDescriptionChange;
@@ -2864,16 +2888,6 @@ procedure TMainForm.edtAlignmentKeyPress(Sender: TObject; var Key: char);
 begin
   if rbFsmAligned.Checked then
     alignsizechangedbyuser := True;
-end;
-
-procedure TMainForm.FormActivate(Sender: TObject);
-begin
-
-end;
-
-procedure TMainForm.FormDeactivate(Sender: TObject);
-begin
-
 end;
 
 procedure TMainForm.FormDropFiles(Sender: TObject; const FileNames: array of string);
@@ -2888,22 +2902,28 @@ begin
   end;
 end;
 
-procedure TMainForm.Foundlist3AdvancedCustomDrawSubItem(
-  Sender: TCustomListView; Item: TListItem; SubItem: Integer;
-  State: TCustomDrawState; Stage: TCustomDrawStage; var DefaultDraw: Boolean);
+procedure TMainForm.Foundlist3CustomDrawItem(Sender: TCustomListView;
+  Item: TListItem; State: TCustomDrawState; var DefaultDraw: boolean);
+var
+  s: string;
 begin
-
+  if foundlist <> nil then
+  begin
+    if foundlist.inmodule(item.index) then
+      foundlist3.Canvas.Font.Color := clgreen
+    else
+      foundlist3.Canvas.Font.Color := GetSysColor(COLOR_WINDOWTEXT);
+  end;
 end;
 
 procedure TMainForm.Foundlist3CustomDrawSubItem(Sender: TCustomListView;
   Item: TListItem; SubItem: Integer; State: TCustomDrawState;
   var DefaultDraw: Boolean);
-
 var r: trect;
   ts: TTextStyle;
+  drawn:boolean;
 begin
-  //check if the current value is different from the previous value. (just do a bytecompare)
-
+  drawn:=false;
   if miShowPreviousValue.checked and (PreviousResults<>nil) then
   begin
     if (item.subItems[1]<>'<none>') and (item.subitems[0]<>item.subitems[1]) then
@@ -2911,11 +2931,13 @@ begin
       sender.Canvas.Font.color:=clred;
       sender.canvas.font.Style:=sender.canvas.font.Style+[fsBold];
       sender.canvas.Refresh;
+      drawn:=true;
     end;
   end;
-
-
-  defaultdraw:=true;
+  if(not drawn)then
+  begin
+    sender.Canvas.Font.color:=GetSysColor(COLOR_WINDOWTEXT);
+  end;
 end;
 
 procedure TMainForm.Address1Click(Sender: TObject);
@@ -2923,7 +2945,17 @@ begin
   addresslist.doAddressChange;
 end;
 
-procedure TMainForm.Button1Click(Sender: TObject);
+procedure TMainForm.cbCodePageChange(Sender: TObject);
+begin
+  if cbCodePage.checked then cbunicode.Checked:=false;
+end;
+
+procedure TMainForm.cbUnicodeChange(Sender: TObject);
+begin
+  if cbunicode.checked then cbCodePage.checked:=false;
+end;
+
+procedure TMainForm.EnableLCLClick(Sender: TObject);
 var llf: TLazLoggerFile;
 begin
   llf:=GetDebugLogger;
@@ -3046,14 +3078,14 @@ end;
 
 
 
+procedure TMainForm.miSignTableClick(Sender: TObject);
+begin
+  if Opendialog1.Execute then
+    signTablefile(opendialog1.filename);
+end;
+
 
 var t: TRemoteMemoryManager;
-
-
-
-
-
-
 
 procedure TMainForm.miScanDirtyOnlyClick(Sender: TObject);
 begin
@@ -3130,7 +3162,7 @@ begin
   if Processwindow = nil then
     ProcessWindow := TProcessWindow.Create(application);
 
-  ProcessWindow.btnOpenFile.click;
+  ProcessWindow.miOpenFile.click;
 
   if ProcessWindow.modalresult=mrOK then
     openProcessEpilogue(oldprocessname, oldprocess, oldprocesshandle);
@@ -3222,11 +3254,6 @@ begin
   else
     frmSnapshotHandler.show;
 end;
-
-procedure TMainForm.miSetupSnapshotKeysClick(Sender: TObject);
-begin
-end;
-
 
 procedure TMainForm.miLockMouseInGameClick(Sender: TObject);
 begin
@@ -4093,7 +4120,7 @@ end;
 
 
 
-procedure TMainForm.SaveCurrentState(scanstate: PScanState);
+procedure TMainForm.SaveCurrentState(scanstate: PScanState; skipuservalues: boolean=false);
 begin
   //save the current state
   scanstate.alignsizechangedbyuser := alignsizechangedbyuser;
@@ -4107,23 +4134,32 @@ begin
   scanstate.lblcompareToSavedScan.left := lblcompareToSavedScan.left;
 
 
-  scanstate.FromAddress.Text := fromaddress.Text;
-  scanstate.ToAddress.Text := toaddress.Text;
+  if not skipuservalues then
+  begin
+    scanstate.FromAddress.Text := fromaddress.Text;
+    scanstate.ToAddress.Text := toaddress.Text;
+  end;
 
 
   scanstate.cbfastscan.Checked := cbFastScan.Checked;
-  scanstate.edtAlignment.Text := edtAlignment.Text;
+
+  if not skipuservalues then
+    scanstate.edtAlignment.Text := edtAlignment.Text;
+
   scanstate.edtAlignment.enabled:=edtAlignment.enabled;
 
   scanstate.rbFsmAligned.checked:=rbFsmAligned.checked;
 
-  scanstate.scanvalue.Text := scanvalue.Text;
+  if not skipuservalues then
+    scanstate.scanvalue.Text := scanvalue.Text;
+
   scanstate.scanvalue.Visible := scanvalue.Visible;
 
   if scanvalue2 <> nil then
   begin
     scanstate.scanvalue2.exists := True;
-    scanstate.scanvalue2.Text := scanvalue2.Text;
+    if not skipuservalues then
+      scanstate.scanvalue2.Text := scanvalue2.Text;
   end
   else
     scanstate.scanvalue2.exists := False;
@@ -4165,6 +4201,8 @@ begin
 
   scanstate.cbunicode.Visible := cbunicode.visible;
   scanstate.cbunicode.checked := cbunicode.checked;
+  scanstate.cbcodepage.Visible := cbcodepage.visible;
+  scanstate.cbcodepage.checked := cbcodepage.checked;
   scanstate.cbCaseSensitive.Visible := cbCaseSensitive.visible;
   scanstate.cbCaseSensitive.checked := cbCaseSensitive.checked;
 
@@ -4205,10 +4243,12 @@ begin
   end
   else
   begin
-    scanstate.memscan := tmemscan.Create(progressbar1);
+    scanstate.memscan := tmemscan.Create(ProgressBar);
     scanstate.memscan.GuiScanner:=true;
+    scanstate.memscan.OnGuiUpdate:=MemscanGuiUpdate;
     scanstate.foundlist := TFoundList.Create(foundlist3, scanstate.memscan);    //build again
-    scanstate.memscan.setScanDoneCallback(mainform.handle, wm_scandone);
+    scanstate.memscan.OnInitialScanDone:=memscan.OnInitialScanDone;
+    scanstate.memscan.OnScanDone:=memscan.OnScanDone;
   end;
 
   savecurrentstate(scanstate);
@@ -4299,9 +4339,6 @@ begin
       rbfsmLastDigts.checked:=true;
 
 
-
-    cbFastScanClick(cbfastscan);    //update the alignment textbox
-
     pnlfloat.Visible := newstate.floatpanel.Visible;
     rt1.Checked := newstate.floatpanel.rounded;
     rt2.Checked := newstate.floatpanel.roundedextreme;
@@ -4352,9 +4389,17 @@ begin
 
 
     if VarType.itemindex=10 then
-      createGroupConfigButton
+    begin
+      createGroupConfigButton;
+      scantype.Visible:=false;
+      lblscantype.Visible:=false;
+    end
     else
+    begin
       destroyGroupConfigButton;
+      scantype.Visible:=true;
+      lblscantype.Visible:=true;
+    end;
 
     UpdateScanType;
 
@@ -4378,6 +4423,8 @@ begin
 
     cbunicode.Visible := newstate.cbunicode.visible;
     cbunicode.checked := newstate.cbunicode.checked;
+    cbCodePage.Visible := newstate.cbCodePage.visible;
+    cbCodePage.checked := newstate.cbCodePage.checked;
     cbCaseSensitive.Visible := newstate.cbCaseSensitive.visible;
     cbCaseSensitive.checked := newstate.cbCaseSensitive.checked;
 
@@ -4416,18 +4463,14 @@ var
 begin
   if scantablist = nil then
   begin
-    {setlength(c, panel5.ControlCount);
-    for i := 0 to panel5.controlcount - 1 do
-      c[i] := panel5.Controls[i];  }
-
-
     foundlistheightdiff := btnMemoryView.top - (foundlist3.top + foundlist3.Height);
 
     scantablist := TTablist.Create(self);
+    scantablist.Name:='ScantabList';
 
     scantabtopcontrol:=panel7;
-    if scantabtopcontrol.top+scantabtopcontrol.Height<ProgressBar1.Top+ProgressBar1.Height then
-      scantabtopcontrol:=ProgressBar1;
+    if scantabtopcontrol.top+scantabtopcontrol.Height<ProgressBar.Top+ProgressBar.Height then
+      scantabtopcontrol:=ProgressBar;
 
     scantablist.AnchorSideTop.Control:=scantabtopcontrol;
     scantablist.AnchorSideTop.Side:=asrBottom;
@@ -4473,37 +4516,13 @@ begin
     tabcounter := 3;
 
 
-    //p.height:=p.TabHeight;
-
-    //make space for the tabs
-    //luckely this routine is not called often
-
-    for i := 0 to panel5.ControlCount - 1 do
-    begin
-      if ( panel5.Controls[i] <> panel7) and (panel5.Controls[i] <> LoadButton) and
-        (panel5.Controls[i] <> SaveButton) and (panel5.Controls[i] <> ProcessLabel) and
-        (panel5.Controls[i] <> Progressbar1) and (panel5.Controls[i] <> logopanel) and
-        (panel5.Controls[i] <> btnMemoryView) and (panel5.Controls[i] <> speedbutton2) and
-        (panel5.Controls[i] <> btnAddAddressManually) and (panel5.Controls[i] <> scantablist) then
-      begin
-        panel5.Controls[i].Top := panel5.Controls[i].Top + 20; //p.height;
-        //c[i].Parent:=p;
-      end;
-
-    end;
-
     scantablist.Color := clBtnFace;
     scantablist.Brush.Color := clBtnFace;
 
 
     foundlist3.Height := btnMemoryView.top - foundlist3.top - foundlistheightdiff;
 
-   { panel5.Constraints.MinHeight :=
-      gbScanOptions.top + gbScanOptions.Height + speedbutton2.Height + 3;
-
-    if panel5.Height < panel5.Constraints.MinHeight then
-      panel5.Height := panel5.Constraints.MinHeight;  }
-
+    scantype.Top:=scantype.top+scantablist.Height+4;
   end
   else
   begin
@@ -4719,18 +4738,6 @@ begin
 
 end;
 
-procedure TMainForm.pnlScanOptionsClick(Sender: TObject);
-begin
-
-end;
-
-procedure TMainForm.pnlScanOptionsResize(Sender: TObject);
-var i: integer;
-begin
-
-end;
-
-
 procedure TMainForm.miShowCustomTypeDebugClick(Sender: TObject);
 var ct: TCustomType;
 begin
@@ -4755,8 +4762,6 @@ begin
   end;
   //foundlist3.AutoWidthLastColumn:=false;
   //foundlist3.AutoWidthLastColumn:=true;
-
-  Foundlist3Resize(Foundlist3);
 
   reg:=TRegistry.create;
   try
@@ -4829,8 +4834,6 @@ begin
 
   //enable the memory scan groupbox
   setGbScanOptionsEnabled(True);
-
-  cbFastScanClick(cbfastscan);
 
 
   VartypeChange(vartype);
@@ -4908,6 +4911,9 @@ begin
   i:=FromAddress.Font.Size;
   FromAddress.Font.Size:=font.size;
   if i=0 then beep;  }
+
+  miSignTable.visible:=canSignTables;
+
 
   vartype.Items.Clear;
   vartype.items.add(rs_vtBinary);
@@ -5228,7 +5234,7 @@ begin
   btnAddAddressManually.Left := clientwidth - btnAddAddressManually.Width;
   commentbutton.left := clientwidth - commentbutton.Width;
   logopanel.left := clientwidth - logopanel.Width;
-  progressbar1.Width := progressbar1.Width - differentwidth;
+  ProgressBar.Width := ProgressBar.Width - differentwidth;
   undoscan.left := undoscan.left - differentwidth;
 
   //create object for the auto attach list
@@ -5296,11 +5302,17 @@ begin
 
 
   XInputMessages(true);
+
+  luaclass_newClass(luavm, self);
+  lua_setglobal(luavm,'MainForm');
+
+  luaclass_newClass(luavm, addresslist);
+  lua_setglobal(luavm,'AddressList');
 end;
 
 procedure TMainForm.ChangedHandle(Sender: TObject);
 begin
-  memscan.setScanDoneCallback(mainform.handle, wm_scandone);
+ // memscan.setScanDoneCallback(mainform.handle, wm_scandone);
 
   //reset the hotkeys
   hotkeyTargetWindowHandleChanged(oldhandle, mainform.handle);
@@ -5350,11 +5362,6 @@ begin
     MemoryBrowser.memoryaddress := foundlist.GetAddress(foundlist3.ItemIndex, b, s);
     memorybrowser.Show;
   end;
-end;
-
-procedure TMainForm.TrackBar1Change(Sender: TObject);
-begin
-
 end;
 
 procedure TMainForm.UpdateTimerTimer(Sender: TObject);
@@ -5684,7 +5691,9 @@ begin
   finally
     scantype.OnSelect := old2;
     scantype.OnChange := old;
+
   end;
+
 end;
 
 procedure TMainForm.Value1Click(Sender: TObject);
@@ -6172,9 +6181,12 @@ begin
   rbdec.Visible := decbitvis;
   rbbit.Visible := decbitvis;
 
+  pnlScanValueOptions.visible:=(cbHexadecimal.Visible or rbDec.visible or rbBit.Visible);
+
 
 
   cbunicode.Visible := unicodevis;
+  cbCodePage.visible:= unicodevis;
 
   cbCaseSensitive.Visible := casevis;
 
@@ -6215,7 +6227,7 @@ procedure TMainForm.LogoClick(Sender: TObject);
 begin
   if messagedlg(rsDoYouWantToGoToTheCheatEngineWebsite, mtConfirmation,
     [mbYes, mbNo], 0) = mrYes then
-    ShellExecute(0, PChar('open'), PChar('http://www.cheatengine.org/?referredby=CE65'),
+    ShellExecute(0, PChar('open'), PChar('http://www.cheatengine.org/?referredby=CE67'),
       PChar(''), PChar(''), SW_MAXIMIZE);
 
 end;
@@ -6223,16 +6235,6 @@ end;
 procedure TMainForm.VarTypeDropDown(Sender: TObject);
 begin
   vartype.DropDownCount := vartype.items.Count;
-end;
-
-procedure TMainForm.WindowsClick(Sender: TObject);
-begin
-
-end;
-
-procedure TMainForm.rbAllMemoryClick(Sender: TObject);
-begin
-
 end;
 
 procedure TMainForm.FormCloseQuery(Sender: TObject; var CanClose: boolean);
@@ -6388,6 +6390,10 @@ begin
   Changescript1.Visible := (addresslist.selectedRecord <> nil) and
     (addresslist.selectedrecord.VarType = vtAutoAssembler);
 
+  miAsyncScript.visible:=Changescript1.Visible;
+  if miAsyncScript.visible then
+    miAsyncScript.Checked:=addresslist.selectedrecord.Async;
+
   n5.Visible := (addresslist.selectedRecord <> nil);
 
   Pointerscanforthisaddress1.Visible :=
@@ -6442,11 +6448,6 @@ begin
 
 end;
 
-procedure TMainForm.Unfreezealladdresses1Click(Sender: TObject);
-begin
-
-end;
-
 procedure TMainForm.foundlistpopupPopup(Sender: TObject);
 var bytesize: integer;
   i, last: integer;
@@ -6489,6 +6490,7 @@ begin
     Removeselectedaddresses1.enabled := not (GetVarType in [vtBinary, vtByteArray, vtAll]);
 
   miChangeValue.enabled:=Browsethismemoryarrea1.enabled;
+  miChangeValueBack.enabled:=Browsethismemoryarrea1.enabled;
   miAddAddress.enabled:=Browsethismemoryarrea1.enabled;
 
   //updatwe the display override
@@ -7000,8 +7002,6 @@ begin
     reg.Free;
   end;
 
-  if hotkey = '' then
-    label7.Caption := '';
   //  fronthotkey:=hotkey;
 end;
 
@@ -7044,11 +7044,12 @@ var
   extrasize: integer;
   s: string;
 begin
-
-
   if onetimeonly then
     exit;
 
+  fontmultiplication:=ProcessLabel.Height/15; //normal dpi/font settings have this at 15.
+
+  screen.HintFont:=font;
 
 
   onetimeonly := True;
@@ -7173,7 +7174,9 @@ begin
     Caption := cenorm + ' ' + rsEXPIRED + '!';
 
   if autoattachtimer.Enabled then
-    autoattachcheck;
+    autoattachcheck
+  else
+    AutoAttachThread:=TAutoAttachThread.Create(false);
 
 
 
@@ -7183,12 +7186,13 @@ begin
   autosize:=false;
 
 
-  memscan := tmemscan.Create(progressbar1);
+  memscan := tmemscan.Create(ProgressBar);
   memscan.GuiScanner:=true;
+  memscan.OnGuiUpdate:=MemscanGuiUpdate;
+  memscan.OnInitialScanDone:=scandone;
+
   foundlist := tfoundlist.Create(foundlist3, memscan);
 
-  //don't put this in oncreate, just don't
-  memscan.setScanDoneCallback(mainform.handle, wm_scandone);
 
   logo.Width:=settingsbutton.width;
 
@@ -7231,10 +7235,10 @@ begin
   AdjustSpeedButtonSize(SpeedButton3);
 
 
-  if panel7.Height>progressbar1.Top+progressbar1.Height then
+  if panel7.Height>ProgressBar.Top+ProgressBar.Height then
     label6.AnchorSideTop.Control:=panel7
   else
-    label6.AnchorSideTop.Control:=progressbar1;
+    label6.AnchorSideTop.Control:=ProgressBar;
 
 
   panel5resize(panel5);
@@ -7305,7 +7309,6 @@ begin
 
   vartype.Constraints.MinWidth:=i;
 
-
   i:=foundlist3.width;
   if undoscan.left<btnNextScan.Left+btnNextScan.Width then
   begin
@@ -7359,7 +7362,7 @@ begin
 
   lblcompareToSavedScan.left:=btnNewScan.left-(lblcompareToSavedScan.Width div 2)+((btnNextScan.left+btnNextScan.Width-btnNewScan.left) div 2);
 
-  progressbar1.height:=scaley(progressbar1.height, 96);
+  ProgressBar.height:=scaley(ProgressBar.height, 96);
 
   i:=((logopanel.Top+logopanel.height)-scanvalue.top)+2;
   if i>0 then
@@ -7427,6 +7430,9 @@ begin
     if i>addresslist.headers.Sections[3].Width then addresslist.headers.Sections[3].Width:=i;
 
 
+    //initial state: focus on the addresslist
+    panel5.height:=gbScanOptions.top+gbScanOptions.Height;
+
   end;
 
   panel5.OnResize(panel5);
@@ -7438,6 +7444,8 @@ begin
   scantype.AnchorSideTop.Control:=nil;
   scantype.Anchors:=[akRight, akTop];
 
+  if not memscan.canWriteResults then
+    MessageDlg(Format(rsInvalidScanFolder, [memscan.GetScanFolder]), mtError, [mbOk], 0);
 
  // ImageList2.GetBitmap(0);
 end;
@@ -7476,15 +7484,28 @@ begin
 end;
 
 procedure TMainForm.Cut2Click(Sender: TObject);
+var e: TEdit;
 begin
-  if scanvalue.SelLength > 0 then
-    scanvalue.CutToClipboard;
+  e:=nil;
+  if scanvalue.Focused then e:=scanvalue;
+  if (scanvalue2<>nil) and scanvalue2.Focused then e:=scanvalue2;
+  if e=nil then exit;
+
+  if e.SelLength > 0 then
+    e.CutToClipboard;
 end;
 
 procedure TMainForm.Copy2Click(Sender: TObject);
+var e: tedit;
 begin
-  if scanvalue.SelLength > 0 then
-    scanvalue.CopyToClipboard;
+  e:=nil;
+  if scanvalue.Focused then e:=scanvalue;
+  if (scanvalue2<>nil) and scanvalue2.Focused then e:=scanvalue2;
+
+  if e=nil then exit;
+
+  if e.SelLength > 0 then
+    e.CopyToClipboard;
 end;
 
 procedure TMainForm.Paste2Click(Sender: TObject);
@@ -7493,18 +7514,23 @@ var
   Text: string;
   i: integer;
   allow: boolean;
+  e: tedit;
 begin
   cb := tclipboard.Create;
-  if cb.HasFormat(CF_TEXT) then
-  begin
-    if scanvalue.Focused then
-      scanvalue.PasteFromClipboard;
+  try
+    if cb.HasFormat(CF_TEXT) then
+    begin
+      e:=nil;
+      if scanvalue.Focused then e:=scanvalue;
+      if (scanvalue2<>nil) and scanvalue2.Focused then e:=scanvalue2;
 
-    if (scanvalue2 <> nil) and (scanvalue2.Focused) then
-      scanvalue2.PasteFromClipboard;
+      if e=nil then exit;
+
+      e.PasteFromClipboard;
+    end;
+  finally
+    cb.Free;
   end;
-
-  cb.Free;
 end;
 
 procedure TMainForm.checkpaste;
@@ -7538,6 +7564,7 @@ end;
 procedure TMainForm.SettingsClick(Sender: TObject);
 var
   oldmodulelist: pointer;
+  oldScanDone, oldInitialScanDone: TNotifyEvent;
 begin
 
   suspendhotkeyhandler;
@@ -7574,11 +7601,22 @@ begin
   begin
     //memscan can be reset
     if memscan <> nil then
+    begin
+      oldScanDone:=memscan.OnScanDone;
+      oldInitialScanDone:=memscan.OnInitialScanDone;
       memscan.Free;
+    end
+    else
+    begin
+      oldScanDone:=nil;
+      oldInitialScanDone:=scanDone;
+    end;
 
-    memscan := tmemscan.Create(progressbar1);
+    memscan := tmemscan.Create(ProgressBar);
     memscan.GuiScanner:=true;
-    memscan.setScanDoneCallback(mainform.handle, wm_scandone);
+    memscan.OnGuiUpdate:=memscanGuiUpdate;
+    memscan.OnScanDone:=oldScanDone;
+    memscan.OnInitialScanDone:=oldInitialScanDone;
   end;
 end;
 
@@ -7591,14 +7629,8 @@ procedure TMainForm.LogoMouseDown(Sender: TObject; Button: TMouseButton;
   Shift: TShiftState; X, Y: integer);
 begin
   if button = mbright then
-    about1.click;
+    miAbout.click;
 end;
-
-procedure TMainForm.btnShowRegionsClick(Sender: TObject);
-begin
-
-end;
-
 
 
 procedure TMainForm.OpenProcesslist1Click(Sender: TObject);
@@ -7629,12 +7661,6 @@ end;
 procedure TMainForm.OpenMemorybrowser1Click(Sender: TObject);
 begin
   btnMemoryView.click;
-end;
-
-
-procedure TMainForm.cbFastScanClick(Sender: TObject);
-begin
-
 end;
 
 procedure TMainForm.cbSaferPhysicalMemoryChange(sender: tobject);
@@ -7740,25 +7766,6 @@ begin
   begin
     //show unrandimized addresses
     unrandomize.showaddresses;
-  end;
-end;
-
-procedure TMainForm.Foundlist3CustomDrawItem(Sender: TCustomListView;
-  Item: TListItem; State: TCustomDrawState; var DefaultDraw: boolean);
-var
-  s: string;
-begin
-
-  defaultdraw := True;
-  // s:=item.Caption;
-  //  item.SubItems[0]:='';
-  //  s:=item.SubItems[0];
-
-
-  if foundlist <> nil then
-  begin
-    if foundlist.inmodule(item.index) then
-      foundlist3.Canvas.Font.Color := clgreen;
   end;
 end;
 
@@ -7910,13 +7917,18 @@ var
   x: TFrmAutoInject;
   y: array of integer;
 begin
+  if memrec.AsyncProcessing then exit;
+
   if memrec.isBeingEdited then
   begin
-    if memrec.autoAssembleWindow.WindowState<>wsNormal then
-      memrec.autoAssembleWindow.WindowState:=wsNormal;
+    if memrec.autoAssembleWindow<>nil then
+    begin
+      if memrec.autoAssembleWindow.WindowState<>wsNormal then
+        memrec.autoAssembleWindow.WindowState:=wsNormal;
 
-    memrec.autoAssembleWindow.show;
-    memrec.autoAssembleWindow.BringToFront;
+      memrec.autoAssembleWindow.show;
+      memrec.autoAssembleWindow.BringToFront;
+    end;
   end
   else
   begin
@@ -7948,6 +7960,14 @@ begin
   end;
 
 end;
+
+procedure TMainForm.miAsyncScriptClick(Sender: TObject);
+begin
+  if (addresslist.selectedRecord <> nil) and
+    (addresslist.selectedRecord.VarType = vtAutoAssembler) then
+     addresslist.selectedRecord.Async:=miAsyncScript.Checked;
+end;
+
 
 procedure TMainForm.Changescript1Click(Sender: TObject);
 begin
@@ -8262,6 +8282,16 @@ begin
   try
     valuetype:=foundlist.vartype;
     address := foundlist.GetAddress(item.Index, extra, Value);
+
+    if (address=0) then
+    begin
+      item.Caption := rsProcessing;
+      item.subitems.add(rsProcessing);
+      item.subitems.add(rsProcessing);
+      exit;
+    end;
+
+
     AddressString:=IntToHex(address,8);
 
     hexadecimal:=foundlist.isHexadecimal;
@@ -8357,7 +8387,12 @@ begin
       begin
         p:=PreviousResults.getpointertoaddress(address, ssvt, ct);
         if p=nil then
-          previousvalue:=rsNone
+        begin
+          if PreviousResults.lastFail=1 then
+            previousvalue:=rsFileInUse
+          else
+            previousvalue:=rsBusy+' : '+inttostr(PreviousResults.lastFail)
+        end
         else
           previousvalue:=readAndParsePointer(address, p, valuetype, ct, hexadecimal, foundlist.isSigned);
       end;
@@ -8471,6 +8506,65 @@ begin
 
 end;
 
+procedure TMainForm.miSaveFileClick(Sender: TObject);
+begin
+  if Processwindow = nil then
+    ProcessWindow := TProcessWindow.Create(application);
+
+  if ProcessWindow.opendialog2.Execute then
+    Filehandler.CommitChanges(ProcessWindow.opendialog2.filename);
+end;
+
+procedure TMainForm.miChangeValueBackClick(Sender: TObject);
+var
+  currentlySelectedSavedResultname: string;
+  s: tstringlist;
+  i: integer;
+  a: ptruint;
+  p: pointer;
+
+  bytesize: integer;
+  x: ptruint;
+
+  savedscan: TSavedScanHandler;
+begin
+  //show a list of possible options. Previous, last scan, savedscan
+  if memscan=nil then exit;
+
+  bytesize:=memscan.Getbinarysize div 8;
+  if bytesize=0 then exit;
+
+  s:=tstringlist.create();
+
+  memscan.getsavedresults(s);
+  s.insert(0,'Last Scan');
+
+  i:=ShowSelectionList(self,'Previous value liss','Select the saved results you wish to use',s,currentlySelectedSavedResultname);
+  s.free;
+  if i=-1 then exit;
+  if i=0 then currentlySelectedSavedResultname:='TMP';
+
+  savedscan:=TSavedScanHandler.create(memscan.getScanFolder, currentlySelectedSavedResultname);
+  savedscan.AllowNotFound:=true;
+  savedscan.AllowRandomAccess:=true;
+
+  try
+    for i:=0 to foundlist3.items.Count-1 do
+    begin
+      if foundlist3.Items[i].Selected then
+      begin
+        a:=foundlist.GetAddress(i);
+        p:=savedscan.getpointertoaddress(a, memscan.VarType,memscan.CustomType);
+
+        if p<>nil then
+          WriteProcessMemory(processhandle, pointer(a),p,bytesize,x);
+      end;
+    end;
+  finally
+    savedscan.free;
+  end;
+end;
+
 procedure TMainForm.miChangeValueClick(Sender: TObject);
 var
   a:ptruint;
@@ -8564,12 +8658,40 @@ begin
   end;
 end;
 
-procedure TMainForm.autoattachcheck;
+procedure TAutoAttachThread.autoattachcheck;
+begin
+  MainForm.autoattachcheck(CurrentProcessList);
+end;
+
+constructor TAutoAttachThread.Create(CreateSuspended: boolean);
+begin
+  Interval:=2000;
+  CurrentProcessList:=TStringList.Create;
+  inherited Create(CreateSuspended);
+end;
+
+procedure TAutoAttachThread.Execute;
+begin
+  while not terminated do
+  begin
+    if ((MainForm.autoattachlist = nil) or (formsettings = nil) or (MainForm.extraautoattachlist = nil)) or
+       ((MainForm.autoattachlist.Count+MainForm.extraautoattachlist.Count)<1) or
+       ((not formsettings.cbAlwaysAutoAttach.Checked) and ((processhandle <> 0) or (processid <> 0))) then
+    begin
+      sleep(Interval);
+      continue;
+    end;
+
+    getprocesslist(CurrentProcessList,false,true);
+    synchronize(autoattachcheck);
+    sleep(Interval);
+  end;
+end;
+
+procedure TMainForm.autoattachcheck(pl: TStringList = nil);
 var
-  pl: TStringList;
   i, j, k: integer;
   newPID: dword;
-  pli: PProcessListInfo;
   a: string;
   p: string;
 
@@ -8577,13 +8699,6 @@ var
   oldphandle: thandle;
   attachlist: TStringList;
 begin
-  if (autoattachlist = nil) or (formsettings = nil) or (extraautoattachlist = nil) then
-    exit;
-
-  if (not formsettings.cbAlwaysAutoAttach.Checked) and
-    ((processhandle <> 0) or (processid <> 0)) then
-    exit;
-
   attachlist := TStringList.Create;
   try
     attachlist.AddStrings(autoattachlist);
@@ -8595,8 +8710,11 @@ begin
       //in case there is no processwatcher this timer will be used to enumare the processlist every 2 seconds
 
 
-      pl := TStringList.Create;
-      getprocesslist(pl);
+      if pl=nil then
+      begin
+        pl := TStringList.Create;
+        getprocesslist(pl,false,true);
+      end;
 
       try
         for i := 0 to attachlist.Count - 1 do
@@ -8641,17 +8759,7 @@ begin
         //  pl.IndexOf(autoattachlist.items[i]);
 
       finally
-        for i := 0 to pl.Count - 1 do
-          if pl.Objects[i] <> nil then
-          begin
-            pli := pointer(pl.Objects[i]);
-            if pli.processIcon > 0 then
-              DestroyIcon(pli.processIcon);
-            freemem(pli);
-            pli:=nil;
-          end;
-
-        pl.Free;
+        cleanProcessList(pl);
       end;
 
     end;
@@ -8664,6 +8772,13 @@ end;
 
 procedure TMainForm.AutoAttachTimerTimer(Sender: TObject);
 begin
+  if (autoattachlist = nil) or (formsettings = nil) or (extraautoattachlist = nil) then
+    exit;
+
+  if (not formsettings.cbAlwaysAutoAttach.Checked) and
+    ((processhandle <> 0) or (processid <> 0)) then
+    exit;
+
   autoattachcheck;
 end;
 
@@ -8695,9 +8810,9 @@ begin
     if ScanTabList <> nil then
       ScanTabList.Enabled := False;
 
-    progressbar1.min := 0;
-    progressbar1.max := 1000;
-    progressbar1.position := 0;
+    ProgressBar.min := 0;
+    ProgressBar.max := 1000;
+    ProgressBar.position := 0;
 
     if scanvalue2 <> nil then
       svalue2 := scanvalue2.Text
@@ -8743,6 +8858,9 @@ begin
     memscan.floatscanWithoutExponents:=cbFloatSimple.checked;
     memscan.inversescan:=cbNot.Checked and cbnot.Visible;
 
+    memscan.codePage:=cbCodePage.checked;
+
+
     memscan.firstscan(GetScanType2, getVarType2, roundingtype,
       scanvalue.Text, svalue2, scanStart, scanStop,
       cbHexadecimal.Checked, rbdec.Checked, cbunicode.Checked, cbCaseSensitive.Checked, fastscanmethod, edtAlignment.Text,
@@ -8762,7 +8880,7 @@ begin
   end;
 end;
 
-procedure TMainForm.ScanDone(var message: TMessage);
+procedure TMainForm.ScanDone(sender: TObject);
 var
   i: integer;
   canceled: boolean;
@@ -8781,24 +8899,21 @@ begin
   button2.Tag := 2;
   button2.Caption := rsScan;
   button4.tag := 0;
-  progressbar1.Position := 0;
+  ProgressBar.Position := 0;
 
 
   SetProgressState(tbpsNone);
 
 
+  error:=tmemscan(sender).hasError;
 
-
-  if message.wparam > 0 then
+  if tmemscan(sender).hasError then
   begin
+    error:=true;
     messagedlg(Format(rsScanError, [memscan.GetErrorString]), mtError, [mbOK], 0);
-    error := True;
   end
   else
-    error := False;
-
-  {  else}
-  //  showmessage('SCAN SUCCES. time='+inttostr(after-before));
+    error:=false;
 
 
   enablegui(memscan.LastScanType = stNextScan);
@@ -8851,7 +8966,7 @@ begin
   beep;
   //let the blind user know the scan has finished (See, I'm thinking about the visually impeared users...)
 
-  progressbar1.Position := 0;
+  ProgressBar.Position := 0;
   UpdateFoundlisttimer.Enabled := True;
 
   Scantype.ItemIndex := lastscantype;
@@ -8934,9 +9049,9 @@ begin
     advancedoptions.Pausebutton.Click;
   end;
 
-  progressbar1.min := 0;
-  progressbar1.max := 1000;
-  progressbar1.position := 0;
+  ProgressBar.min := 0;
+  ProgressBar.max := 1000;
+  ProgressBar.position := 0;
 
 
   if scanvalue2 <> nil then
@@ -8948,6 +9063,7 @@ begin
 
   memscan.floatscanWithoutExponents:=cbFloatSimple.checked;
   memscan.inverseScan:=cbNot.Checked and cbnot.Visible;
+  memscan.codePage:=cbCodePage.checked;
 
   memscan.nextscan(GetScanType2, roundingtype, scanvalue.Text,
     svalue2, cbHexadecimal.Checked, rbdec.Checked,
@@ -9271,7 +9387,7 @@ end;
 
 
 {^^^^^^^^Processlist menuitem^^^^^^^^}
-procedure TMainForm.About1Click(Sender: TObject);
+procedure TMainForm.miAboutClick(Sender: TObject);
 begin
   About := TAbout.Create(self);
   About.showmodal;
@@ -9293,7 +9409,7 @@ begin
     oldprocesshandle := processhandle;
     with TProcessWindow.Create(self) do
     begin
-      btnCreateThread.Click;
+      miCreateProcess.Click;
       Free;
     end;
 
@@ -9329,20 +9445,10 @@ begin
   addresslist.Clear;
 end;
 
-procedure TMainForm.actLuaScriptExecute(Sender: TObject);
-begin
-
-end;
-
 procedure TMainForm.File1Click(Sender: TObject);
 begin
 
   miSaveScanresults.Enabled := memscan.nextscanCount > 0;
-end;
-
-procedure TMainForm.Label61Click(Sender: TObject);
-begin
-
 end;
 
 procedure TMainForm.actOpenProcesslistExecute(Sender: TObject);
@@ -9462,6 +9568,10 @@ begin
   end;
 end;
 
+procedure TMainForm.MemscanGuiUpdate(sender: TObject; totaladdressestoscan: qword; currentlyscanned: qword; foundcount: qword);
+begin
+  self.foundcount:=foundcount;
+end;
 
 initialization
   DecimalSeparator := '.';
